@@ -4,32 +4,25 @@
 
 # Install dependencies only when needed
 FROM node:20.15.0-alpine AS deps
-
-ARG SERVICE_ENV
-CMD ["echo", "SERVICE_ENV=${SERVICE_ENV}"]
-
 WORKDIR /app
 COPY package.json pnpm-lock.yaml ./
 RUN npm install -g pnpm
-RUN pnpm install
+RUN pnpm install --frozen-lockfile
 
 # Rebuild the source code only when needed
 FROM node:20.15.0-alpine AS builder
 WORKDIR /app
 COPY . .
 ARG SERVICE_ENV
+RUN if [ "$SERVICE_ENV" = "prod" ]; then export NODE_ENV=production; else export NODE_ENV=development; fi
 COPY ./dotenv/.env.${SERVICE_ENV} ./.env
 COPY --from=deps /app/node_modules ./node_modules
+RUN npm install -g pnpm
 RUN pnpm run build
 
 # Production image, copy all the files and run pm2
 FROM node:20.15.0-alpine AS runner
 WORKDIR /app
-
-# Set NODE_ENV based on SERVICE_ENV
-ARG SERVICE_ENV
-ENV NODE_ENV=${SERVICE_ENV}
-RUN if [ "$SERVICE_ENV" = "prod" ]; then export NODE_ENV=production; else export NODE_ENV=development; fi
 
 # Install PM2
 RUN npm install -g pm2
